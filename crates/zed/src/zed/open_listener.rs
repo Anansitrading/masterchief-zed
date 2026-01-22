@@ -52,6 +52,9 @@ pub enum OpenRequestKind {
     SharedAgentThread {
         session_id: String,
     },
+    NewAgentThread {
+        server_name: String,
+    },
     DockMenuAction {
         index: usize,
     },
@@ -110,6 +113,8 @@ impl OpenRequest {
                 });
             } else if url == "zed://agent" {
                 this.kind = Some(OpenRequestKind::AgentPanel);
+            } else if let Some(agent_path) = url.strip_prefix("zed://agent/new") {
+                this.parse_agent_new_url(agent_path)?
             } else if let Some(session_id_str) = url.strip_prefix("zed://agent/shared/") {
                 if uuid::Uuid::parse_str(session_id_str).is_ok() {
                     this.kind = Some(OpenRequestKind::SharedAgentThread {
@@ -198,6 +203,25 @@ impl OpenRequest {
         self.kind = Some(OpenRequestKind::GitCommit {
             sha: sha.to_string(),
         });
+
+        Ok(())
+    }
+
+    fn parse_agent_new_url(&mut self, agent_path: &str) -> Result<()> {
+        // Format: ?server=<name> or /?server=<name>
+        let agent_path = agent_path.strip_prefix('/').unwrap_or(agent_path);
+
+        let query = agent_path
+            .strip_prefix('?')
+            .context("invalid agent new url: missing query string")?;
+
+        let server_name = url::form_urlencoded::parse(query.as_bytes())
+            .find_map(|(key, value)| (key == "server").then_some(value))
+            .filter(|s| !s.is_empty())
+            .context("invalid agent new url: missing server query parameter")?
+            .to_string();
+
+        self.kind = Some(OpenRequestKind::NewAgentThread { server_name });
 
         Ok(())
     }

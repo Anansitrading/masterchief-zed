@@ -6,7 +6,7 @@ mod zed;
 
 use agent::{SharedThread, ThreadStore};
 use agent_client_protocol;
-use agent_ui::AgentPanel;
+use agent_ui::{AgentPanel, ExternalAgent, NewExternalAgentThread};
 use anyhow::{Context as _, Error, Result};
 use clap::Parser;
 use cli::FORCE_CLI_MODE_ENV_VAR_NAME;
@@ -861,6 +861,21 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
                         if let Some(panel) = workspace.panel::<AgentPanel>(cx) {
                             panel.focus_handle(cx).focus(window, cx);
                         }
+                    })
+                })
+                .detach_and_log_err(cx);
+            }
+            OpenRequestKind::NewAgentThread { server_name } => {
+                cx.spawn(async move |cx| {
+                    let workspace =
+                        workspace::get_any_active_workspace(app_state, cx.clone()).await?;
+                    workspace.update(cx, |_workspace, window, cx| {
+                        let action = NewExternalAgentThread {
+                            agent: Some(ExternalAgent::Custom {
+                                name: server_name.into(),
+                            }),
+                        };
+                        window.dispatch_action(Box::new(action), cx);
                     })
                 })
                 .detach_and_log_err(cx);
